@@ -1,0 +1,102 @@
+name: Deploy .NET 8 App to Azure (OIDC)
+
+env:
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+
+defaults:
+  run:
+    working-directory: '.'
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  check-secrets:
+    runs-on: [css-new-runner2]
+    outputs:
+      secrets-valid: ${{ steps.secrets-valid.outputs.isvalid }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: secrets-valid
+        env:
+          azure-webapp-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [ -z "$azure-webapp-name" ] || [ -z "$azure-subscription-id" ]; then
+            echo "isvalid=false" >> $GITHUB_OUTPUT
+          else
+            echo "isvalid=true" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    runs-on: [css-new-runner2]
+    needs: check-secrets
+    if: needs.check-secrets.outputs.secrets-valid == 'true'
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ProcessPortal/ProcessPortal.csproj
+
+      - name: Build
+        run: dotnet build ProcessPortal/ProcessPortal.csproj --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test ProcessPortal/ProcessPortal.csproj --no-build --verbosity normal
+
+      - name: Publish
+        run: dotnet publish ProcessPortal/ProcessPortal.csproj -c Release -o ./publish --no-build
+
+      - name: Archive published output
+        run: zip -r app.zip ./publish
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-app
+          path: app.zip
+
+  deploy:
+    runs-on: [css-new-runner2]
+    needs: [build, check-secrets]
+    if: needs.check-secrets.outputs.secrets-valid == 'true'
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet-app
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v1.5.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          package: app.zip
+
+      - name: Validate deployment
+        run: |
+          sleep 10
+          curl -f https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net || exit 1
+

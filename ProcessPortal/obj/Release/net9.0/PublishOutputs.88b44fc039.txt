@@ -1,0 +1,7 @@
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/ProcessPortal
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/appsettings.Development.json
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/appsettings.json
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/ProcessPortal.dll
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/ProcessPortal.deps.json
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/ProcessPortal.runtimeconfig.json
+/Users/chandrasekharlakkimsetty/Downloads/ProcessPortal/publish/ProcessPortal.pdb
