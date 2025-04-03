@@ -51,7 +51,8 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore ProcessPortal.sln
+        # IMPORTANT: pass --configfile to ensure we only use our local NuGet.config
+        run: dotnet restore ProcessPortal.sln --configfile ./NuGet.config
 
       - name: Build
         run: dotnet build ProcessPortal.sln --configuration Release --no-restore
