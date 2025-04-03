@@ -99,4 +99,4 @@ jobs:
       - name: Validate deployment
         run: |
           sleep 10
-          curl -f https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net || exit 1
+          curl -f https://${{ secrets.AZURE_WEBAPP_NAME }}-cafta6fch2f5athn.eastus-01.azurewebsites.net || exit 1
