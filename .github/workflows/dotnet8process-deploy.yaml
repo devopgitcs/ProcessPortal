@@ -21,7 +21,7 @@ on:
 
 jobs:
   check-secrets:
-    runs-on: [css-new-runner2]
+    runs-on: css-new-runner2
     outputs:
       secrets-valid: ${{ steps.secrets-valid.outputs.isvalid }}
     steps:
@@ -39,7 +39,7 @@ jobs:
           fi
 
   build:
-    runs-on: [css-new-runner2]
+    runs-on: css-new-runner2
     needs: check-secrets
     if: needs.check-secrets.outputs.secrets-valid == 'true'
     steps:
@@ -51,13 +51,13 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore ProcessPortal/ProcessPortal.csproj
+        run: dotnet restore ProcessPortal.sln
 
       - name: Build
-        run: dotnet build ProcessPortal/ProcessPortal.csproj --configuration Release --no-restore
+        run: dotnet build ProcessPortal.sln --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test ProcessPortal/ProcessPortal.csproj --no-build --verbosity normal
+        run: dotnet test ProcessPortal.sln --no-build --verbosity normal
 
       - name: Publish
         run: dotnet publish ProcessPortal/ProcessPortal.csproj -c Release -o ./publish --no-build
@@ -72,7 +72,7 @@ jobs:
           path: app.zip
 
   deploy:
-    runs-on: [css-new-runner2]
+    runs-on: css-new-runner2
     needs: [build, check-secrets]
     if: needs.check-secrets.outputs.secrets-valid == 'true'
     steps:
@@ -99,4 +99,3 @@ jobs:
         run: |
           sleep 10
           curl -f https://${{ secrets.AZURE_WEBAPP_NAME }}.azurewebsites.net || exit 1
-
