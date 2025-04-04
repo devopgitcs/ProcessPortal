@@ -1,7 +1,8 @@
-name: Deploy .NET 8 App to Azure (OIDC)
+name: Deploy .NET ProcessPortal App to Azure (OIDC) with Slots
 
 env:
-  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  AZURE_WEBAPP_PACKAGE_PATH: 'app.zip'
+  DOTNET_VERSION: '8.0.x'
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
   RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
@@ -26,7 +27,6 @@ jobs:
       secrets-valid: ${{ steps.secrets-valid.outputs.isvalid }}
     steps:
       - uses: actions/checkout@v3
-
       - id: secrets-valid
         env:
           azure-webapp-name: ${{ secrets.AZURE_WEBAPP_NAME }}
@@ -44,28 +44,20 @@ jobs:
     if: needs.check-secrets.outputs.secrets-valid == 'true'
     steps:
       - uses: actions/checkout@v3
-
       - name: Set up .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
-
+          dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Restore dependencies
-        # IMPORTANT: pass --configfile to ensure we only use our local NuGet.config
         run: dotnet restore ProcessPortal.sln --configfile ./NuGet.config
-
       - name: Build
         run: dotnet build ProcessPortal.sln --configuration Release --no-restore
-
       - name: Run tests
         run: dotnet test ProcessPortal.sln --no-build --verbosity normal
-
       - name: Publish
         run: dotnet publish ProcessPortal/ProcessPortal.csproj -c Release -o ./publish --no-build
-
       - name: Archive published output
         run: zip -r app.zip ./publish
-
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
@@ -76,27 +68,57 @@ jobs:
     runs-on: css-new-runner2
     needs: [build, check-secrets]
     if: needs.check-secrets.outputs.secrets-valid == 'true'
+    strategy:
+      matrix:
+        environment: [ production, dev, qa, staging ]
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: dotnet-app
-
       - name: Azure Login (OIDC)
         uses: azure/login@v1.5.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
+      - name: Test network connectivity to Private Endpoint
+        run: |
+          az network private-endpoint-connection show \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ secrets.AZURE_PRIVATE_ENDPOINT_NAME }} \
+            --type Microsoft.Web/sites \
+            --resource-name ${{ secrets.AZURE_WEBAPP_NAME }}
+      - name: Deploy to Azure Web App (Production)
+        if: matrix.environment == 'production'
         uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          package: app.zip
-
-      - name: Validate deployment
+          package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+      - name: Deploy to Azure Web App Slot
+        if: matrix.environment != 'production'
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          slot-name: ${{ matrix.environment }}
+          package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+      - name: Validate deployment (Production)
+        if: matrix.environment == 'production'
         run: |
-          sleep 10
-          curl -f https://${{ secrets.AZURE_WEBAPP_NAME }}-cafta6fch2f5athn.eastus-01.azurewebsites.net || exit 1
+          sleep 30
+          curl -s https://${{ secrets.AZURE_WEBAPP_NAME }}-${{ secrets.AZURE_PROD_ID }}.eastus.azurewebsites.net
+      - name: Validate deployment (Dev)
+        if: matrix.environment == 'dev'
+        run: |
+          sleep 30
+          curl -s https://${{ secrets.AZURE_WEBAPP_NAME }}-${{ secrets.AZURE_DEV_ID }}.eastus.azurewebsites.net
+      - name: Validate deployment (QA)
+        if: matrix.environment == 'qa'
+        run: |
+          sleep 30
+          curl -s https://${{ secrets.AZURE_WEBAPP_NAME }}-${{ secrets.AZURE_QA_ID }}.eastus.azurewebsites.net
+      - name: Validate deployment (Staging)
+        if: matrix.environment == 'staging'
+        run: |
+          sleep 30
+          curl -s https://${{ secrets.AZURE_WEBAPP_NAME }}-${{ secrets.AZURE_STAGING_ID }}.eastus.azurewebsites.net
